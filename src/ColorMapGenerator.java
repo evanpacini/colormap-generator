@@ -1,12 +1,12 @@
 import java.awt.image.BufferedImage;
-import java.util.stream.IntStream;
 
 public class ColorMapGenerator {
-    private static final String palettePath = "nostalgia-1x.png";
+    private static final double[][] palette = readPalette("rust-gold-8-1x.png");
+    private static final int[] intPalette = toIntPalette();
 
-    private static double[][] readPalette() {
+    private static double[][] readPalette(String path) {
         try {
-            BufferedImage img = javax.imageio.ImageIO.read(new java.io.File(palettePath));
+            BufferedImage img = javax.imageio.ImageIO.read(new java.io.File(path));
             double[][] palette = new double[img.getWidth()][3];
             for (int i = 0; i < img.getWidth(); i++) {
                 int rgb = img.getRGB(i, 0);
@@ -18,7 +18,12 @@ public class ColorMapGenerator {
         }
     }
 
-    private static final double[][] palette = readPalette();
+    private static int[] toIntPalette() {
+        int[] intPalette = new int[palette.length];
+        for (int i = 0; i < palette.length; i++)
+            intPalette[i] = ((int) Math.round(palette[i][0] * 255) << 16) | ((int) Math.round(palette[i][1] * 255) << 8) | (int) Math.round(palette[i][2] * 255);
+        return intPalette;
+    }
 
     private static double srgbToLinear(double c) {
         if (c <= 0.04045) return c / 12.92;
@@ -89,8 +94,8 @@ public class ColorMapGenerator {
     }
 
     public static void main(String[] args) {
-        double[][] colorToPalette = new double[16777216][3];
-        IntStream.range(0, 256).parallel().forEach(r -> {
+        int[] pixels = new int[16777216];
+        java.util.stream.IntStream.range(0, 256).parallel().forEach(r -> {
             for (int g = 0; g < 256; g++) {
                 for (int b = 0; b < 256; b++) {
                     double[] color = new double[]{(double) r / 255., (double) g / 255., (double) b / 255.};
@@ -104,18 +109,11 @@ public class ColorMapGenerator {
                             nearest = i;
                         }
                     }
-                    colorToPalette[(r << 16) | (g << 8) | b] = palette[nearest];
+                    pixels[(b << 16) | (g << 8) | r] = intPalette[nearest];
                 }
             }
         });
-        int[] pixels = new int[16777216];
-        for (int i = 0; i < 16777216; i++) {
-            int r = (int) (Math.round(colorToPalette[i][0] * 255.));
-            int g = (int) (Math.round(colorToPalette[i][1] * 255.));
-            int b = (int) (Math.round(colorToPalette[i][2] * 255.));
-            pixels[i] = 0xff000000 | (r << 16) | (g << 8) | b;
-        }
-        BufferedImage img = new BufferedImage(4096, 4096, BufferedImage.TYPE_INT_ARGB);
+        BufferedImage img = new BufferedImage(4096, 4096, BufferedImage.TYPE_INT_RGB);
         img.setRGB(0, 0, 4096, 4096, pixels, 0, 4096);
         try {
             javax.imageio.ImageIO.write(img, "png", new java.io.File("colormap.png"));
